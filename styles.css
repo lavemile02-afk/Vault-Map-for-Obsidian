@@ -1,0 +1,5 @@
+.vault-map-status { cursor: pointer; }
+.vault-map-textarea { width: 100%; min-width: 16em; font-family: var(--font-monospace); }
+.vault-map-changes .vault-map-period { color: var(--text-muted); font-size: var(--font-ui-small); }
+.vault-map-changes ul { max-height: 14em; overflow-y: auto; margin-top: 0; }
+.vault-map-changes h4 { margin-bottom: 0.3em; }

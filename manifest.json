@@ -1,0 +1,10 @@
+{
+	"id": "vault-map",
+	"name": "Vault Map",
+	"version": "1.0.0",
+	"minAppVersion": "1.13.7",
+	"description": "Writes a JSON Lines index of every note (frontmatter, links, embeds, backlinks and broken links) that scripts and AI agents can read without scanning the vault.",
+	"author": "Émile Lavoie",
+	"authorUrl": "https://github.com/lavemile02-afk",
+	"isDesktopOnly": true
+}

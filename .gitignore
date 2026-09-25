@@ -1,0 +1,4 @@
+# Personal settings written by Obsidian when the plugin is installed from this folder
+data.json
+node_modules/
+.DS_Store
