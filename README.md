@@ -1,6 +1,6 @@
 # Vault Map
 
-Vault Map writes a single [JSON Lines](https://jsonlines.org/) file that indexes every note in your vault: its frontmatter, outgoing links, embeds, backlinks and broken links, plus vault-wide lists of unresolved links, duplicate titles and orphan notes.
+Vault Map writes a single [JSON Lines](https://jsonlines.org/) file that indexes every note in your vault: its frontmatter, outgoing links, embeds, citation links, backlinks and broken links, plus vault-wide lists of unresolved links, duplicate titles and orphan notes.
 
 It is meant for tools that work on your vault from the outside, such as scripts or AI coding agents (Claude Code, Codex, Cursor…). Instead of opening hundreds of notes to find out what links to what, they read one small file. Everything comes from Obsidian's own metadata cache, so links are resolved exactly as Obsidian resolves them.
 
@@ -18,8 +18,8 @@ It is meant for tools that work on your vault from the outside, such as scripts 
 The first line is a metadata object, followed by one line per note, sorted by path.
 
 ```jsonl
-{"_meta":true,"schema_version":2,"generated_at":"2026-09-25T17:49:33.000Z","generated_by":"vault-map 1.0.0","total_notes":557,"schema_doc":{…},"unresolved_links":{"Missing note":["Folder/Note.md"]},"duplicate_titles":{},"orphans":["Concepts/Leaf.md"],"orphan_folders":["Concepts"]}
-{"path":"Concepts/Peat.md","title":"Peat","folder":"Concepts","frontmatter":{"tags":["soil"],"type":"Concept"},"links_out":["Peatland","Missing note"],"embeds_out":["peat-core.jpeg"],"line_count":42,"unresolved_out":["Missing note"],"backlinks":["Peatland","Sphagnum"]}
+{"_meta":true,"schema_version":3,"generated_at":"2026-09-25T17:49:33.000Z","generated_by":"vault-map 1.0.0","total_notes":557,"schema_doc":{…},"unresolved_links":{"Missing note":["Folder/Note.md"]},"duplicate_titles":{},"orphans":["Concepts/Leaf.md"],"orphan_folders":["Concepts"]}
+{"path":"Concepts/Peat.md","title":"Peat","folder":"Concepts","frontmatter":{"tags":["soil"],"type":"Concept"},"links_out":["Peatland","Missing note"],"embeds_out":["peat-core.jpeg"],"citations_out":[],"line_count":42,"unresolved_out":["Missing note"],"backlinks":["Peatland","Sphagnum"]}
 ```
 
 ### Metadata line
@@ -47,6 +47,7 @@ The first line is a metadata object, followed by one line per note, sorted by pa
 | `frontmatter` | Properties as parsed by Obsidian (`{}` if none) |
 | `links_out` | Targets of the note's links (wikilinks, Markdown links and links in properties): the linked note's title, the file name for attachments, or the raw link text when the link is broken |
 | `embeds_out` | Same, for embeds (`![[…]]` and `![](…)`) |
+| `citations_out` | Works the note cites with citation links to a passage, `[text](obsidian://cite?note=…&q=…)` (the format of the [Better Citations](https://github.com/lavemile02-afk/Better_Citations_for_Obsidian) plugin; Obsidian itself does not index these links): the cited note's title, `doi:` and the DOI for a work cited by DOI only, or the raw note name when no note is found. Links in code are ignored |
 | `line_count` | Number of lines, a cheap indication of the note's size |
 | `unresolved_out` | The broken links among `links_out` |
 | `backlinks` | Titles of the other notes that link to this one |

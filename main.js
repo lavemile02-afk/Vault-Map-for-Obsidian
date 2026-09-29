@@ -1,7 +1,7 @@
 "use strict";
 // Vault Map — writes a JSON Lines index of every note in the vault (frontmatter,
-// links, embeds, backlinks, unresolved links) that scripts and AI agents can read
-// without scanning the vault themselves.
+// links, embeds, citation links, backlinks, unresolved links) that scripts and
+// AI agents can read without scanning the vault themselves.
 //
 // Everything comes from Obsidian's own metadata cache, so links resolve exactly
 // as they do in Obsidian and any valid YAML frontmatter is supported.
@@ -9,7 +9,7 @@
 
 const { Plugin, Notice, Modal, PluginSettingTab, Setting, getLinkpath, normalizePath } = require("obsidian");
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 const DEFAULT_SETTINGS = {
   outputPath: "VAULT-MAP.jsonl",
@@ -29,12 +29,81 @@ const SCHEMA_DOC = {
   frontmatter: "YAML frontmatter as parsed by Obsidian ({} if none)",
   links_out: "targets of this note's links ([[wikilinks]], [markdown](links) and links in properties), anchors and aliases removed, deduplicated: the title of the linked note, the file name for other files, or the raw link text when unresolved",
   embeds_out: "same, for ![[embeds]] (images, PDFs, transcluded notes), kept separate from links_out",
+  citations_out: "works this note cites with citation links to a passage ([text](obsidian://cite?note=…&q=…), the format of the Better Citations plugin), deduplicated: the title of the cited note; 'doi:' and the DOI for a work cited by DOI only, or whose note is not found; the raw note text otherwise. Not in links_out",
   line_count: "number of lines in the file, a cheap proxy for its size",
   unresolved_out: "subset of links_out that points to no existing file (broken links)",
   backlinks: "titles of the other notes that link to this note",
 };
 
-const NOTE_FIELDS = ["title", "folder", "frontmatter", "links_out", "embeds_out", "line_count", "unresolved_out", "backlinks"];
+const NOTE_FIELDS = ["title", "folder", "frontmatter", "links_out", "embeds_out", "citations_out", "line_count", "unresolved_out", "backlinks"];
+
+// ---------- Citation links ----------
+// A citation link points to a passage of a work: [text](obsidian://cite?note=…&doi=…&occ=…&qe=…&q=…),
+// the format of the Better Citations plugin. Obsidian does not index these
+// links (they are URLs), so they are read from the note's text.
+
+const CITE_PREFIX = "obsidian://cite?";
+const CITE_PARAMS = ["note", "q", "qe", "occ", "doi"];
+
+function safeDecode(text) {
+  try {
+    return decodeURIComponent(text.replace(/%(?![0-9A-Fa-f]{2})/g, "%25"));
+  } catch (e) {
+    return text;
+  }
+}
+
+// The "note" and "doi" of a citation URL. A value runs to the next known
+// parameter, so a quoted passage may itself contain "&" or "=".
+function citeTarget(url) {
+  const query = url.slice(CITE_PREFIX.length);
+  const boundary = new RegExp(`(?:^|&)(${CITE_PARAMS.join("|")})=`, "g");
+  const starts = [];
+  let m;
+  while ((m = boundary.exec(query)) !== null) starts.push({ key: m[1], start: m.index, valueStart: m.index + m[0].length });
+  const values = {};
+  starts.forEach((st, i) => {
+    const end = i + 1 < starts.length ? starts[i + 1].start : query.length;
+    if (!(st.key in values)) values[st.key] = safeDecode(query.slice(st.valueStart, end)).trim();
+  });
+  return { note: values.note || "", doi: values.doi || "" };
+}
+
+// The citation URLs of a note, outside code (fenced blocks and inline code).
+// A destination in angle brackets ends at ">"; otherwise at the first
+// unbalanced ")" (a quoted passage may contain spaces and balanced parentheses).
+function citationUrls(text) {
+  const urls = [];
+  let inCode = false;
+  for (const raw of text.split("\n")) {
+    if (/^\s*(```|~~~)/.test(raw)) inCode = !inCode;
+    if (inCode || !raw.includes(CITE_PREFIX)) continue;
+    const line = raw.replace(/`[^`]*`/g, (code) => " ".repeat(code.length));
+    let from = 0;
+    for (;;) {
+      const at = line.indexOf("](", from);
+      if (at < 0) break;
+      let start = at + 2;
+      const angled = line[start] === "<";
+      if (angled) start++;
+      from = start;
+      if (!line.startsWith(CITE_PREFIX, start)) continue;
+      let end = start;
+      if (angled) {
+        end = line.indexOf(">", start);
+        if (end < 0) break;
+      } else {
+        for (let depth = 0; end < line.length; end++) {
+          if (line[end] === "(") depth++;
+          if (line[end] === ")") { if (depth === 0) break; depth--; }
+        }
+      }
+      urls.push(line.slice(start, end));
+      from = end;
+    }
+  }
+  return urls;
+}
 
 // Fixed locale so the file order is the same whatever Obsidian's language.
 const collator = new Intl.Collator("en");
@@ -247,6 +316,14 @@ module.exports = class VaultMapPlugin extends Plugin {
       titles.get(file.basename).push(file.path);
 
       const text = await vault.cachedRead(file);
+      const citations = new Set();
+      for (const url of citationUrls(text)) {
+        const { note, doi } = citeTarget(url);
+        const dest = note ? metadataCache.getFirstLinkpathDest(getLinkpath(note), file.path) : null;
+        if (dest && dest.extension === "md") citations.add(dest.basename);
+        else if (doi) citations.add(`doi:${doi.toLowerCase()}`);
+        else if (note) citations.add(note);
+      }
       notes.push({
         path: file.path,
         title: file.basename,
@@ -254,6 +331,7 @@ module.exports = class VaultMapPlugin extends Plugin {
         frontmatter: cache.frontmatter ? JSON.parse(JSON.stringify(cache.frontmatter)) : {},
         links_out: links.targets,
         embeds_out: embeds.targets,
+        citations_out: [...citations],
         line_count: text.split("\n").length,
         unresolved_out: links.unresolved,
       });
